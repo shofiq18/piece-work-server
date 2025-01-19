@@ -1,6 +1,4 @@
 
-
-
 const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -31,22 +29,37 @@ async function run() {
     await client.connect();
     console.log("Connected to MongoDB!");
 
+    // Database and collections
     const db = client.db("pieceDB");
     const usersCollection = db.collection("users");
     const tasksCollection = db.collection("tasks");
+    const submissionsCollection = db.collection("submissions");
 
-    // Add a user (POST)
+    // Add or Get a user (POST)
     app.post('/users', async (req, res) => {
       const user = req.body;
       if (!user.email || !user.name) {
         return res.status(400).send({ message: "Missing required fields: email and name" });
       }
+
       try {
+        // Check if user already exists
+        const existingUser = await usersCollection.findOne({ email: user.email });
+        if (existingUser) {
+          return res.status(200).send(existingUser); // Return existing user
+        }
+
+        // Add new user if not found
         const result = await usersCollection.insertOne(user);
-        res.status(201).send(result);
+        if (result.insertedId) {
+          const newUser = await usersCollection.findOne({ _id: result.insertedId });
+          res.status(201).send(newUser);
+        } else {
+          res.status(500).send({ message: "Failed to add user" });
+        }
       } catch (error) {
-        console.error("Error adding user:", error);
-        res.status(500).send({ message: "Failed to add user" });
+        console.error("Error adding or fetching user:", error);
+        res.status(500).send({ message: "Failed to process user" });
       }
     });
 
@@ -78,58 +91,57 @@ async function run() {
     });
 
     // Deduct coins from a user (PATCH)
+    app.patch('/users/deduct-coins', async (req, res) => {
+      const { email, amount } = req.body;
+      if (!email || !amount) {
+        return res.status(400).send({ message: "Missing required fields: email and amount" });
+      }
+
+      try {
+        // Check if user has enough coins before deducting
+        const user = await usersCollection.findOne({ email });
+        if (!user || user.coins < amount) {
+          return res.status(400).send({ message: "Insufficient coins" });
+        }
+
+        // Deduct coins
+        const result = await usersCollection.updateOne(
+          { email },
+          { $inc: { coins: -amount } }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        // Fetch updated user data after deducting coins
+        const updatedUser = await usersCollection.findOne({ email });
+        res.send(updatedUser); // Return the updated user
+      } catch (error) {
+        console.error("Error deducting coins:", error);
+        res.status(500).send({ message: "Failed to deduct coins" });
+      }
+    });
+
     // Add a task (POST)
-app.post('/tasks', async (req, res) => {
-  const task = req.body;
-  if (!task.task_title || !task.required_workers || !task.payable_amount || !task.completion_date || !task.email) {
-    return res.status(400).send({ message: "Missing required fields in task" });
-  }
+    app.post('/tasks', async (req, res) => {
+      const task = req.body;
+      if (!task.task_title || !task.required_workers || !task.payable_amount || !task.completion_date || !task.email) {
+        return res.status(400).send({ message: "Missing required fields in task" });
+      }
 
-  try {
-    const result = await tasksCollection.insertOne(task);
-    if (result.insertedId) {
-      res.status(201).send({ message: "Task added successfully", taskId: result.insertedId });
-    } else {
-      res.status(500).send({ message: "Failed to add task" });
-    }
-  } catch (error) {
-    console.error("Error adding task:", error);
-    res.status(500).send({ message: "Failed to add task" });
-  }
-});
-
-// Deduct coins from a user (PATCH)
-app.patch('/users/deduct-coins', async (req, res) => {
-  const { email, amount } = req.body;
-  if (!email || !amount) {
-    return res.status(400).send({ message: "Missing required fields: email and amount" });
-  }
-
-  try {
-    // Check if user has enough coins before deducting
-    const user = await usersCollection.findOne({ email });
-    if (!user || user.coins < amount) {
-      return res.status(400).send({ message: "Insufficient coins" });
-    }
-
-    // Deduct coins
-    const result = await usersCollection.updateOne(
-      { email },
-      { $inc: { coins: -amount } }
-    );
-    
-    if (result.matchedCount === 0) {
-      return res.status(404).send({ message: "User not found" });
-    }
-
-    // Fetch updated user data after deducting coins
-    const updatedUser = await usersCollection.findOne({ email });
-    res.send(updatedUser); // Return the updated user
-  } catch (error) {
-    console.error("Error deducting coins:", error);
-    res.status(500).send({ message: "Failed to deduct coins" });
-  }
-});
+      try {
+        const result = await tasksCollection.insertOne(task);
+        if (result.insertedId) {
+          res.status(201).send({ message: "Task added successfully", taskId: result.insertedId });
+        } else {
+          res.status(500).send({ message: "Failed to add task" });
+        }
+      } catch (error) {
+        console.error("Error adding task:", error);
+        res.status(500).send({ message: "Failed to add task" });
+      }
+    });
 
     // Get all tasks (GET)
     app.get('/tasks', async (req, res) => {
@@ -139,6 +151,17 @@ app.patch('/users/deduct-coins', async (req, res) => {
       } catch (error) {
         console.error("Error fetching tasks:", error);
         res.status(500).send({ message: "Failed to fetch tasks" });
+      }
+    });
+
+    // Get all tasks with required_workers > 0 (GET)
+    app.get('/tasks/available', async (req, res) => {
+      try {
+        const tasks = await tasksCollection.find({ required_workers: { $gt: 0 } }).toArray();
+        res.send(tasks);
+      } catch (error) {
+        console.error("Error fetching available tasks:", error);
+        res.status(500).send({ message: "Failed to fetch available tasks" });
       }
     });
 
@@ -155,6 +178,92 @@ app.patch('/users/deduct-coins', async (req, res) => {
       } catch (error) {
         console.error("Error fetching task:", error);
         res.status(500).send({ message: "Failed to fetch task" });
+      }
+    });
+
+
+
+    // Add a submission (POST)
+    app.post('/submissions', async (req, res) => {
+      const submission = req.body;
+      if (!submission.task_id || !submission.worker_email || !submission.submission_details) {
+        return res.status(400).send({ message: "Missing required fields in submission" });
+      }
+
+      try {
+        const result = await submissionsCollection.insertOne(submission);
+        if (result.insertedId) {
+          res.status(201).send({ message: "Submission added successfully", submissionId: result.insertedId });
+        } else {
+          res.status(500).send({ message: "Failed to add submission" });
+        }
+      } catch (error) {
+        console.error("Error adding submission:", error);
+        res.status(500).send({ message: "Failed to add submission" });
+      }
+    });
+    // Assuming you're using Express.js for the backend
+    app.get('/submissions', async (req, res) => {
+      try {
+        const submissions = await submissionsCollection.find().toArray();
+        res.status(200).json(submissions);
+      } catch (error) {
+        console.error("Error fetching submissions:", error);
+        res.status(500).send({ message: "Failed to fetch submissions" });
+      }
+    });
+
+
+
+    // Fetch submissions for a specific worker email
+    app.get('/submissions/worker/:email', async (req, res) => {
+      const { email } = req.params;
+      try {
+        const submissions = await submissionsCollection.find({ worker_email: email }).toArray();
+        res.send(submissions);
+      } catch (error) {
+        console.error("Error fetching submissions:", error);
+        res.status(500).send({ message: "Failed to fetch submissions" });
+      }
+    });
+
+
+    // Get all submissions for a task (GET)
+    app.get('/submissions/:taskId', async (req, res) => {
+      const taskId = req.params.taskId;
+      try {
+        const submissions = await submissionsCollection.find({ task_id: new ObjectId(taskId) }).toArray();
+        res.send(submissions);
+      } catch (error) {
+        console.error("Error fetching submissions:", error);
+        res.status(500).send({ message: "Failed to fetch submissions" });
+      }
+    });
+
+    // Update submission status (PATCH)
+    app.patch('/submissions/:id', async (req, res) => {
+      const submissionId = req.params.id;
+      const { status } = req.body;
+      if (!status) {
+        return res.status(400).send({ message: "Missing required field: status" });
+      }
+
+      try {
+        const result = await submissionsCollection.updateOne(
+          { _id: new ObjectId(submissionId) },
+          { $set: { status } }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "Submission not found" });
+        }
+
+        // Fetch updated submission
+        const updatedSubmission = await submissionsCollection.findOne({ _id: new ObjectId(submissionId) });
+        res.send(updatedSubmission); // Return the updated submission
+      } catch (error) {
+        console.error("Error updating submission:", error);
+        res.status(500).send({ message: "Failed to update submission" });
       }
     });
 
