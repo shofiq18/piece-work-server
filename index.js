@@ -123,7 +123,17 @@ async function run() {
       }
     });
 
+
+
+
+
+
+
+
+
     // Add a task (POST)
+
+
     app.post('/tasks', async (req, res) => {
       const task = req.body;
       if (!task.task_title || !task.required_workers || !task.payable_amount || !task.completion_date || !task.email) {
@@ -180,6 +190,82 @@ async function run() {
         res.status(500).send({ message: "Failed to fetch task" });
       }
     });
+
+    app.get('/tasks/user/:email', async (req, res) => {
+      const email = req.params.email;
+      try {
+        const tasks = await tasksCollection
+          .find({ email })
+          .sort({ completion_date: -1 })
+          .toArray();
+        res.send(tasks);
+      } catch (error) {
+        console.error("Error fetching user's tasks:", error);
+        res.status(500).send({ message: "Failed to fetch tasks" });
+      }
+    });
+
+    app.patch('/tasks/:id', async (req, res) => {
+      const taskId = req.params.id;
+      const { task_title, task_detail, submission_info } = req.body;
+    
+      try {
+        const result = await tasksCollection.updateOne(
+          { _id: new ObjectId(taskId) },
+          { $set: { task_title, task_detail, submission_info } }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "Task not found" });
+        }
+    
+        res.send({ message: "Task updated successfully" });
+      } catch (error) {
+        console.error("Error updating task:", error);
+        res.status(500).send({ message: "Failed to update task" });
+      }
+    });
+
+    app.delete('/tasks/:id', async (req, res) => {
+      const taskId = req.params.id;
+      try {
+        const task = await tasksCollection.findOne({ _id: new ObjectId(taskId) });
+    
+        if (!task) {
+          return res.status(404).send({ message: "Task not found" });
+        }
+    
+        if (task.required_workers > 0) {
+          const refillAmount = task.required_workers * task.payable_amount;
+          await usersCollection.updateOne(
+            { email: task.email },
+            { $inc: { coins: refillAmount } }
+          );
+        }
+    
+        const result = await tasksCollection.deleteOne({ _id: new ObjectId(taskId) });
+    
+        if (result.deletedCount === 0) {
+          return res.status(404).send({ message: "Failed to delete task" });
+        }
+    
+        res.send({ message: "Task deleted successfully" });
+      } catch (error) {
+        console.error("Error deleting task:", error);
+        res.status(500).send({ message: "Failed to delete task" });
+      }
+    });
+    
+
+
+
+
+
+
+
+
+
+
 
 
 
