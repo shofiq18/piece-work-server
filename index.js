@@ -255,12 +255,144 @@ async function run() {
         res.status(500).send({ message: "Failed to delete task" });
       }
     });
+
+
+
+
+
+
+
+
+    // Buyer Home API
+
+// Get total task count, pending tasks, and total payment paid by the buyer (GET)
+app.get('/buyer-home/:email', async (req, res) => {
+  const email = req.params.email;
+  try {
+    // Total task count
+    const totalTasks = await tasksCollection.countDocuments({ email });
+
+    // Pending tasks count (sum of required_workers)
+    const pendingTasks = await tasksCollection.aggregate([
+      { $match: { email } },
+      { $group: { _id: null, totalPending: { $sum: "$required_workers" } } }
+    ]).toArray();
+
+    // Total payment paid by the buyer
+    const totalPayment = await tasksCollection.aggregate([
+      { $match: { email } },
+      { $project: { totalPayment: { $multiply: ["$payable_amount", "$required_workers"] } } },
+      { $group: { _id: null, totalPayment: { $sum: "$totalPayment" } } }
+    ]).toArray();
+
+    res.send({
+      totalTasks,
+      pendingTasks: pendingTasks[0]?.totalPending || 0,
+      totalPayment: totalPayment[0]?.totalPayment || 0,
+    });
+  } catch (error) {
+    console.error("Error fetching buyer home data:", error);
+    res.status(500).send({ message: "Failed to fetch buyer home data" });
+  }
+});
+
+
+
+
+// Get submissions for tasks with "pending" status (GET)
+app.get('/buyer-home/submissions/:email', async (req, res) => {
+  const email = req.params.email;
+
+  try {
+    // Fetch tasks associated with the buyer
+    const tasks = await tasksCollection.find({ email }).toArray();
+    const taskIds = tasks.map(task => task._id.toString()); // Convert _id to string
+
+    console.log("Task IDs for buyer:", taskIds);
+
+    // Fetch submissions for these task IDs
+    const submissions = await submissionsCollection.find({
+      task_id: { $in: taskIds }, // Match string IDs
+      status: "pending"
+    }).toArray();
+
+    console.log("Fetched submissions:", submissions);
+
+    res.send(submissions);
+  } catch (error) {
+    console.error("Error fetching submissions for buyer:", error);
+    res.status(500).send({ message: "Failed to fetch submissions" });
+  }
+});
+
+
+
+
+// Approve a submission (PATCH)
+app.patch('/submissions/approve/:id', async (req, res) => {
+  const submissionId = req.params.id;
+  try {
+    // Update submission status to "approved"
+    const result = await submissionsCollection.updateOne(
+      { _id: new ObjectId(submissionId) },
+      { $set: { status: "approved" } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({ message: "Submission not found" });
+    }
+
+    // Get the associated task and increase the worker's coins
+    const submission = await submissionsCollection.findOne({ _id: new ObjectId(submissionId) });
+    const task = await tasksCollection.findOne({ _id: new ObjectId(submission.task_id) });
+
+    if (task) {
+      await usersCollection.updateOne(
+        { email: submission.worker_email },
+        { $inc: { coins: task.payable_amount } }
+      );
+    }
+
+    res.send({ message: "Submission approved" });
+  } catch (error) {
+    console.error("Error approving submission:", error);
+    res.status(500).send({ message: "Failed to approve submission" });
+  }
+});
+
+// Reject a submission (PATCH)
+app.patch('/submissions/reject/:id', async (req, res) => {
+  const submissionId = req.params.id;
+  try {
+    // Update submission status to "rejected"
+    const result = await submissionsCollection.updateOne(
+      { _id: new ObjectId(submissionId) },
+      { $set: { status: "rejected" } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({ message: "Submission not found" });
+    }
+
+    // Get the associated task and increase required_workers
+    const submission = await submissionsCollection.findOne({ _id: new ObjectId(submissionId) });
+    const task = await tasksCollection.findOne({ _id: new ObjectId(submission.task_id) });
+
+    if (task) {
+      await tasksCollection.updateOne(
+        { _id: new ObjectId(submission.task_id) },
+        { $inc: { required_workers: 1 } }
+      );
+    }
+
+    res.send({ message: "Submission rejected" });
+  } catch (error) {
+    console.error("Error rejecting submission:", error);
+    res.status(500).send({ message: "Failed to reject submission" });
+  }
+});
+
     
-
-
-
-
-
 
 
 
