@@ -124,6 +124,47 @@ async function run() {
     });
 
 
+    // admin manage user apis
+
+    app.delete('/users/:id', async (req, res) => {
+      const userId = req.params.id;
+      try {
+        const result = await usersCollection.deleteOne({ _id: new ObjectId(userId) });
+        if (result.deletedCount > 0) {
+          res.send({ message: "User deleted successfully" });
+        } else {
+          res.status(404).send({ message: "User not found" });
+        }
+      } catch (error) {
+        console.error("Error deleting user:", error);
+        res.status(500).send({ message: "Failed to delete user" });
+      }
+    });
+
+    
+    app.patch("/users/:id", async (req, res) => {
+      const { id } = req.params;
+      const { role, coins } = req.body;
+    
+      try {
+        const updateData = { role };
+        if (coins !== undefined) {
+          updateData.coins = coins; // Only include coins if provided
+        }
+    
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updateData }
+        );
+    
+        res.status(200).send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to update user" });
+      }
+    });
+        
+
+
 
 
 
@@ -225,6 +266,9 @@ async function run() {
         res.status(500).send({ message: "Failed to update task" });
       }
     });
+
+
+
 
     app.delete('/tasks/:id', async (req, res) => {
       const taskId = req.params.id;
