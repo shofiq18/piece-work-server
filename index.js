@@ -609,21 +609,21 @@ app.post("/save-payment", async (req, res) => {
 
 
 
-// app.get("/payment-history/:email", async (req, res) => {
-//   const { email } = req.params;
+app.get("/payment-history/:email", async (req, res) => {
+  const { email } = req.params;
 
-//   try {
-//     const payments = await paymentsCollection
-//       .find({ email })
-//       .sort({ createdAt: -1 })
-//       .toArray();
+  try {
+    const payments = await paymentsCollection
+      .find({ email })
+      .sort({ createdAt: -1 })
+      .toArray();
 
-//     res.send(payments);
-//   } catch (error) {
-//     console.error("Error fetching payment history:", error);
-//     res.status(500).send({ message: "Failed to fetch payment history" });
-//   }
-// });
+    res.send(payments);
+  } catch (error) {
+    console.error("Error fetching payment history:", error);
+    res.status(500).send({ message: "Failed to fetch payment history" });
+  }
+});
 
 
 
