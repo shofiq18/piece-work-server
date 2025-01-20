@@ -3,13 +3,27 @@ const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
-
 const app = express();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+app.use(
+  cors({
+    origin: "http://localhost:5173", // Replace with your frontend's URL
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Allowed HTTP methods
+    allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
+    credentials: true, // Include cookies or Authorization headers if needed
+  })
+);
+
+app.options("*", cors()); // Respond to preflight `OPTIONS` requests for all routes
+
+
+
 
 // MongoDB Connection URI
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.5gtpi.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -34,6 +48,7 @@ async function run() {
     const usersCollection = db.collection("users");
     const tasksCollection = db.collection("tasks");
     const submissionsCollection = db.collection("submissions");
+    const paymentsCollection = db.collection("payments")
 
     // Add or Get a user (POST)
     app.post('/users', async (req, res) => {
@@ -401,37 +416,6 @@ app.get('/buyer-home/submissions/:email', async (req, res) => {
 
 
 
-// // Approve a submission (PATCH)
-// app.patch('/submissions/approve/:id', async (req, res) => {
-//   const submissionId = req.params.id;
-//   try {
-//     // Update submission status to "approved"
-//     const result = await submissionsCollection.updateOne(
-//       { _id: new ObjectId(submissionId) },
-//       { $set: { status: "approved" } }
-//     );
-
-//     if (result.matchedCount === 0) {
-//       return res.status(404).send({ message: "Submission not found" });
-//     }
-
-//     // Get the associated task and increase the worker's coins
-//     const submission = await submissionsCollection.findOne({ _id: new ObjectId(submissionId) });
-//     const task = await tasksCollection.findOne({ _id: new ObjectId(submission.task_id) });
-
-//     if (task) {
-//       await usersCollection.updateOne(
-//         { email: submission.worker_email },
-//         { $inc: { coins: task.payable_amount } }
-//       );
-//     }
-
-//     res.send({ message: "Submission approved" });
-//   } catch (error) {
-//     console.error("Error approving submission:", error);
-//     res.status(500).send({ message: "Failed to approve submission" });
-//   }
-// });
 
 
 app.put('/approve-submission/:submissionId', async (req, res) => {
@@ -551,7 +535,98 @@ app.patch('/submissions/reject/:id', async (req, res) => {
   }
 });
 
+
+
+
+
+
+
+
+
+
+
+app.post("/create-payment-intent", async (req, res) => {
+  const { amount } = req.body; // Amount is sent from the client in cents
+
+  if (!amount || amount <= 0) {
+    return res.status(400).send({ error: "Invalid payment amount" });
+  }
+
+  try {
+    // Create a payment intent with Stripe
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency: "usd",
+      payment_method_types: ["card"],
+    });
+
+    res.send({
+      clientSecret: paymentIntent.client_secret, // Return the client secret to the frontend
+    });
+  } catch (error) {
+    console.error("Error creating payment intent:", error);
+    res.status(500).send({ error: "Failed to create payment intent" });
+  }
+});
+
+
+
+
+
+app.post("/save-payment", async (req, res) => {
+  const { amount, transactionId, email, coins, timestamp } = req.body;
+
+  try {
     
+
+    // Save payment info to the payments collection
+    const paymentInfo = {
+      amount,
+      transactionId,
+      email,
+      coins,
+      timestamp,
+    };
+    await paymentsCollection.insertOne(paymentInfo);
+
+    // Increment the user's coin balance
+    const result = await usersCollection.updateOne(
+      { email },
+      { $inc: { coins } } // Increment the user's coins
+    );
+
+    if (result.modifiedCount > 0) {
+      res.status(200).send({ success: true, message: "Coins updated successfully." });
+    } else {
+      res.status(400).send({ success: false, message: "Failed to update coins." });
+    }
+  } catch (error) {
+    console.error("Error saving payment:", error);
+    res.status(500).send({ success: false, message: "Internal server error." });
+  }
+});
+
+
+
+
+// app.get("/payment-history/:email", async (req, res) => {
+//   const { email } = req.params;
+
+//   try {
+//     const payments = await paymentsCollection
+//       .find({ email })
+//       .sort({ createdAt: -1 })
+//       .toArray();
+
+//     res.send(payments);
+//   } catch (error) {
+//     console.error("Error fetching payment history:", error);
+//     res.status(500).send({ message: "Failed to fetch payment history" });
+//   }
+// });
+
+
+
 
 
 
