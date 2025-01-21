@@ -11,16 +11,16 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-app.use(
-  cors({
-    origin: "http://localhost:5173", // Replace with your frontend's URL
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Allowed HTTP methods
-    allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
-    credentials: true, // Include cookies or Authorization headers if needed
-  })
-);
+// app.use(
+//   cors({
+//     origin: "http://localhost:5173", // Replace with your frontend's URL
+//     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Allowed HTTP methods
+//     allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
+//     credentials: true, // Include cookies or Authorization headers if needed
+//   })
+// );
 
-app.options("*", cors()); // Respond to preflight `OPTIONS` requests for all routes
+// app.options("*", cors()); // Respond to preflight `OPTIONS` requests for all routes
 
 
 
@@ -40,8 +40,8 @@ const client = new MongoClient(uri, {
 // Connect to MongoDB and define routes
 async function run() {
   try {
-    await client.connect();
-    console.log("Connected to MongoDB!");
+    // await client.connect();
+    // console.log("Connected to MongoDB!");
 
     // Database and collections
     const db = client.db("pieceDB");
@@ -78,6 +78,30 @@ async function run() {
         res.status(500).send({ message: "Failed to process user" });
       }
     });
+
+
+//Home page  best workers get apis 
+
+    app.get("/top-workers", async (req, res) => {
+      try {
+        // Fetch top 6 workers with maximum coins
+        const topWorkers = await usersCollection
+          .find({}, { projection: { name: 1, photo: 1, coins: 1 } })
+          .sort({ coins: -1 }) // Sort by coins in descending order
+          .limit(6) // Limit the results to 6
+          .toArray();
+    
+        res.send(topWorkers);
+      } catch (error) {
+        console.error("Error fetching top workers:", error);
+        res.status(500).send({ error: "Failed to fetch top workers." });
+      }
+    });
+
+    
+
+
+
 
     // Get all users (GET)
     app.get('/users', async (req, res) => {
@@ -761,17 +785,42 @@ async function run() {
         res.status(500).send({ message: "Failed to add submission" });
       }
     });
-    // Assuming you're using Express.js for the backend
-    app.get('/submissions', async (req, res) => {
+
+
+   
+
+    app.get("/submissions", async (req, res) => {
       try {
-        const submissions = await submissionsCollection.find().toArray();
-        res.status(200).json(submissions);
+        const { page = 1, limit = 10, worker_email } = req.query; // Default to page 1, 10 submissions per page
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+        if (!worker_email) {
+          return res.status(400).json({ error: "Worker email is required." });
+        }
+    
+        const totalSubmissions = await submissionsCollection.countDocuments({
+          worker_email: worker_email, // Filter by worker email
+        });
+    
+        const submissions = await submissionsCollection
+          .find({ worker_email: worker_email }) // Filter by worker email
+          .skip(skip)
+          .limit(parseInt(limit))
+          .toArray();
+    
+        res.json({
+          submissions,
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(totalSubmissions / limit),
+          totalSubmissions,
+        });
       } catch (error) {
-        console.error("Error fetching submissions:", error);
-        res.status(500).send({ message: "Failed to fetch submissions" });
+        console.error("Error fetching paginated submissions:", error);
+        res.status(500).json({ error: "Failed to fetch submissions" });
       }
     });
-
+    
+    
 
 
 
