@@ -49,6 +49,7 @@ async function run() {
     const tasksCollection = db.collection("tasks");
     const submissionsCollection = db.collection("submissions");
     const paymentsCollection = db.collection("payments")
+    const withdrawalsCollection =db.collection("withdrawals")
 
     // Add or Get a user (POST)
     app.post('/users', async (req, res) => {
@@ -137,6 +138,195 @@ async function run() {
         res.status(500).send({ message: "Failed to deduct coins" });
       }
     });
+
+
+
+
+
+
+// worker withdrawals api
+
+// app.post("/withdrawals", async (req, res) => {
+//   const {
+//     worker_email,
+//     worker_name,
+//     withdrawal_coin,
+//     withdrawal_amount,
+//     payment_system,
+//     account_number,
+//     withdraw_date,
+//     status,
+//   } = req.body;
+
+//   try {
+//     const user = await usersCollection.findOne({ email: worker_email });
+
+//     if (!user) {
+//       return res.status(404).send({ message: "User not found." });
+//     }
+
+//     if (user.coins < withdrawal_coin) {
+//       return res
+//         .status(400)
+//         .send({ message: "Insufficient coins for withdrawal." });
+//     }
+
+//     // Save withdrawal request with 'pending' status
+//     const withdrawalRequest = {
+//       worker_email,
+//       worker_name,
+//       withdrawal_coin,
+//       withdrawal_amount,
+//       payment_system,
+//       account_number,
+//       withdraw_date,
+//       status: "pending", // Set status as pending
+//     };
+
+//     await withdrawalsCollection.insertOne(withdrawalRequest);
+
+//     res.send({
+//       message: "Withdrawal request submitted successfully.",
+//     });
+//   } catch (error) {
+//     console.error("Error submitting withdrawal request:", error);
+//     res.status(500).send({ message: "Failed to submit withdrawal request." });
+//   }
+// });
+
+app.post("/withdrawals", async (req, res) => {
+  const {
+    worker_email,
+    worker_name,
+    withdrawal_coin,
+    withdrawal_amount,
+    payment_system,
+    account_number,
+    withdraw_date,
+  } = req.body;
+
+  try {
+    const user = await usersCollection.findOne({ email: worker_email });
+
+    if (!user) {
+      return res.status(404).send({ message: "User not found." });
+    }
+
+    if (user.coins < withdrawal_coin) {
+      return res
+        .status(400)
+        .send({ message: "Insufficient coins for withdrawal." });
+    }
+
+    // Save withdrawal request with 'pending' status
+    const withdrawalRequest = {
+      worker_email,
+      worker_name,
+      withdrawal_coin,
+      withdrawal_amount,
+      payment_system,
+      account_number,
+      withdraw_date,
+      status: "pending", // Status will be updated when admin approves
+    };
+
+    await withdrawalsCollection.insertOne(withdrawalRequest);
+
+    res.send({
+      message: "Withdrawal request submitted successfully.",
+    });
+  } catch (error) {
+    console.error("Error submitting withdrawal request:", error);
+    res.status(500).send({ message: "Failed to submit withdrawal request." });
+  }
+});
+
+
+
+// app.post("/withdrawals/approve", async (req, res) => {
+//   const { withdrawalId, worker_email, withdrawal_coin } = req.body;
+
+//   try {
+//     const user = await usersCollection.findOne({ email: worker_email });
+
+//     if (!user) {
+//       return res.status(404).send({ message: "User not found." });
+//     }
+
+//     if (user.coins < withdrawal_coin) {
+//       return res
+//         .status(400)
+//         .send({ message: "Insufficient coins for approval." });
+//     }
+
+//     // Update withdrawal status to 'approved'
+//     await withdrawalsCollection.updateOne(
+//       { _id: new ObjectId(withdrawalId) },
+//       { $set: { status: "approved" } }
+//     );
+
+//     // Deduct coins from the user's balance
+//     await usersCollection.updateOne(
+//       { email: worker_email },
+//       { $inc: { coins: -withdrawal_coin } }
+//     );
+
+//     res.send({ message: "Withdrawal approved successfully." });
+//   } catch (error) {
+//     console.error("Error approving withdrawal:", error);
+//     res.status(500).send({ message: "Failed to approve withdrawal." });
+//   }
+// });
+
+app.post("/withdrawals/approve", async (req, res) => {
+  const { withdrawalId, worker_email, withdrawal_coin } = req.body;
+
+  try {
+    const user = await usersCollection.findOne({ email: worker_email });
+
+    if (!user) {
+      return res.status(404).send({ message: "User not found." });
+    }
+
+    if (user.coins < withdrawal_coin) {
+      return res
+        .status(400)
+        .send({ message: "Insufficient coins for approval." });
+    }
+
+    // Deduct coins from user balance
+    await usersCollection.updateOne(
+      { email: worker_email },
+      { $inc: { coins: -withdrawal_coin } }
+    );
+
+    // Update withdrawal request status to 'approved'
+    await withdrawalsCollection.updateOne(
+      { _id: new ObjectId(withdrawalId) },
+      { $set: { status: "approved" } }
+    );
+
+    res.send({ message: "Withdrawal approved successfully." });
+  } catch (error) {
+    console.error("Error approving withdrawal:", error);
+    res.status(500).send({ message: "Failed to approve withdrawal." });
+  }
+});
+
+
+
+app.get("/withdrawals/pending", async (req, res) => {
+  try {
+    const pendingWithdrawals = await withdrawalsCollection
+      .find({ status: "pending" })
+      .toArray();
+
+    res.send(pendingWithdrawals);
+  } catch (error) {
+    console.error("Error fetching pending withdrawals:", error);
+    res.status(500).send({ message: "Failed to fetch pending withdrawals." });
+  }
+});
 
 
 
