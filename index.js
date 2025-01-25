@@ -11,16 +11,6 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// app.use(
-//   cors({
-//     origin: "http://localhost:5173", // Replace with your frontend's URL
-//     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Allowed HTTP methods
-//     allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
-//     credentials: true, // Include cookies or Authorization headers if needed
-//   })
-// );
-
-// app.options("*", cors()); // Respond to preflight `OPTIONS` requests for all routes
 
 
 
@@ -28,7 +18,6 @@ app.use(express.json());
 // MongoDB Connection URI
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.5gtpi.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
-// Create a MongoClient instance with MongoClientOptions
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -62,7 +51,7 @@ async function run() {
         // Check if user already exists
         const existingUser = await usersCollection.findOne({ email: user.email });
         if (existingUser) {
-          return res.status(200).send(existingUser); // Return existing user
+          return res.status(200).send(existingUser); 
         }
 
         // Add new user if not found
@@ -87,8 +76,8 @@ async function run() {
         // Fetch top 6 workers with maximum coins
         const topWorkers = await usersCollection
           .find({}, { projection: { name: 1, photo: 1, coins: 1 } })
-          .sort({ coins: -1 }) // Sort by coins in descending order
-          .limit(6) // Limit the results to 6
+          .sort({ coins: -1 }) 
+          .limit(6) 
           .toArray();
     
         res.send(topWorkers);
@@ -156,7 +145,7 @@ async function run() {
 
         // Fetch updated user data after deducting coins
         const updatedUser = await usersCollection.findOne({ email });
-        res.send(updatedUser); // Return the updated user
+        res.send(updatedUser); 
       } catch (error) {
         console.error("Error deducting coins:", error);
         res.status(500).send({ message: "Failed to deduct coins" });
@@ -301,7 +290,7 @@ async function run() {
       try {
         const updateData = { role };
         if (coins !== undefined) {
-          updateData.coins = coins; // Only include coins if provided
+          updateData.coins = coins; 
         }
 
         const result = await usersCollection.updateOne(
@@ -525,13 +514,13 @@ async function run() {
       try {
         // Fetch tasks associated with the buyer
         const tasks = await tasksCollection.find({ email }).toArray();
-        const taskIds = tasks.map(task => task._id.toString()); // Convert _id to string
+        const taskIds = tasks.map(task => task._id.toString()); 
 
         console.log("Task IDs for buyer:", taskIds);
 
-        // Fetch submissions for these task IDs
+        
         const submissions = await submissionsCollection.find({
-          task_id: { $in: taskIds }, // Match string IDs
+          task_id: { $in: taskIds }, 
           status: "pending"
         }).toArray();
 
@@ -692,7 +681,7 @@ async function run() {
         });
 
         res.send({
-          clientSecret: paymentIntent.client_secret, // Return the client secret to the frontend
+          clientSecret: paymentIntent.client_secret, 
         });
       } catch (error) {
         console.error("Error creating payment intent:", error);
@@ -723,7 +712,7 @@ async function run() {
         // Increment the user's coin balance
         const result = await usersCollection.updateOne(
           { email },
-          { $inc: { coins } } // Increment the user's coins
+          { $inc: { coins } } 
         );
 
         if (result.modifiedCount > 0) {
@@ -791,7 +780,7 @@ async function run() {
 
     app.get("/submissions", async (req, res) => {
       try {
-        const { page = 1, limit = 10, worker_email } = req.query; // Default to page 1, 10 submissions per page
+        const { page = 1, limit = 10, worker_email } = req.query; 
         const skip = (parseInt(page) - 1) * parseInt(limit);
     
         if (!worker_email) {
@@ -799,11 +788,11 @@ async function run() {
         }
     
         const totalSubmissions = await submissionsCollection.countDocuments({
-          worker_email: worker_email, // Filter by worker email
+          worker_email: worker_email, 
         });
     
         const submissions = await submissionsCollection
-          .find({ worker_email: worker_email }) // Filter by worker email
+          .find({ worker_email: worker_email }) 
           .skip(skip)
           .limit(parseInt(limit))
           .toArray();
@@ -927,7 +916,7 @@ async function run() {
 
         // Fetch updated submission
         const updatedSubmission = await submissionsCollection.findOne({ _id: new ObjectId(submissionId) });
-        res.send(updatedSubmission); // Return the updated submission
+        res.send(updatedSubmission); 
       } catch (error) {
         console.error("Error updating submission:", error);
         res.status(500).send({ message: "Failed to update submission" });
@@ -936,7 +925,7 @@ async function run() {
 
   } catch (error) {
     console.error("Error connecting to MongoDB:", error);
-    process.exit(1); // Exit if there's an issue with the MongoDB connection
+    process.exit(1); 
   }
 }
 
